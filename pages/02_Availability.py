@@ -1,5 +1,4 @@
 import streamlit as st
-from snowflake.snowpark.context import get_active_session
 
 st.set_page_config(page_title="Parc vélo — Tableau", page_icon="📊", layout="wide")
 st.header("📊 Parc vélo — Disponibles / Réservés / Maintenance")

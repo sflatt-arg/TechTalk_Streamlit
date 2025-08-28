@@ -1,24 +1,26 @@
 import streamlit as st
 from datetime import datetime
-from snowflake.snowpark.context import get_active_session
 
 st.set_page_config(page_title="Réservation de vélo", page_icon="📝", layout="centered")
 st.header("📝 Réservation d’un vélo")
 
-# Récupère la session Snowflake (fourni automatiquement par Streamlit in Snowflake)
-session = get_active_session()
+
 
 # Utilitaire simple pour échapper les quotes dans les strings SQL
 def sql_escape(s: str) -> str:
     return (s or "").replace("'", "''")
 
+
 # Modèles disponibles (distincts), même si certains vélos sont en maintenance
-models_rows = session.sql("SELECT DISTINCT MODEL FROM BIKES ORDER BY MODEL").collect()
-models = [r[0] for r in models_rows] if models_rows else []
+bikes = pd.read_csv("table/bikes.csv")
+models = sorted(bikes["MODEL"].dropna().unique().tolist())
 
 # Stations disponibles (nom et ID)
-stations_rows = session.sql("SELECT STATION_ID, NAME FROM STATIONS ORDER BY NAME").collect()
-stations_dict = {r[1]: r[0] for r in stations_rows}  # {name: station_id}
+stations = pd.read_csv("tables/stations.csv")
+
+# Build {name: station_id} dict, ordered by NAME
+stations_sorted = stations.sort_values("NAME")
+stations_dict = dict(zip(stations_sorted["NAME"], stations_sorted["STATION_ID"]))
 station_names = list(stations_dict.keys())
 
 with st.form("reservation_form"):
@@ -50,14 +52,19 @@ if submitted:
     end_station_id = stations_dict[end_station]
     
     # 1) Trouver un vélo disponible du modèle choisi à la station de retrait
-    bike_row = session.sql(f"""
-        SELECT BIKE_ID
-        FROM BIKES
-        WHERE MODEL = '{model_q}' 
-          AND STATUS = 'AVAILABLE' 
-          AND STATION_ID = {start_station_id}
-        LIMIT 1
-    """).collect()
+    bike_row = (
+    bikes[
+        (bikes["MODEL"] == model_q)
+        & (bikes["STATUS"] == "AVAILABLE")
+        & (bikes["STATION_ID"] == start_station_id)
+    ]
+    .head(1)  # LIMIT 1
+)
+
+if not bike_row.empty:
+    bike_id = bike_row.iloc[0]["BIKE_ID"]
+else:
+    bike_id = None
 
     if not bike_row:
         st.error("Aucun vélo disponible pour ce modèle à cet instant.")
@@ -65,14 +72,29 @@ if submitted:
 
     bike_id = bike_row[0][0]
 
-    # 2) Insérer la réservation avec les stations
-    session.sql(f"""
-        INSERT INTO RESERVATIONS (BIKE_ID, START_STATION_ID, END_STATION_ID, USER_EMAIL, PICKUP_TS, DURATION_HOURS)
-        VALUES ({bike_id}, {start_station_id}, {end_station_id}, '{email_q}', '{pickup_iso}', {int(duree)})
-    """).collect()
-    
-    # 3) Marquer le vélo comme réservé
-    session.sql(f"UPDATE BIKES SET STATUS = 'RESERVED' WHERE BIKE_ID = {bike_id}").collect()
-    
-    st.success(f"Réservation confirmée — Vélo ID {bike_id} ({model}) le {pickup_iso} pour {int(duree)}h.")
-    st.info(f"📍 Retrait: {start_station} → Retour: {end_station}")
+
+# --- 2) Insert reservation into reservations.csv ---
+reservations = pd.read_csv("tables/reservations.csv")
+
+new_row = {
+    "BIKE_ID": bike_id,
+    "START_STATION_ID": start_station_id,
+    "END_STATION_ID": end_station_id,
+    "USER_EMAIL": email_q,
+    "PICKUP_TS": pickup_iso,
+    "DURATION_HOURS": int(duree),
+}
+
+# Append new row
+reservations = pd.concat([reservations, pd.DataFrame([new_row])], ignore_index=True)
+
+# Save back to CSV
+reservations.to_csv("tables/reservations.csv", index=False)
+
+# --- 2) Update bikes.csv to mark the bike as RESERVED ---
+bikes.loc[bikes["BIKE_ID"] == bike_id, "STATUS"] = "RESERVED"
+bikes.to_csv("tables/bikes.csv", index=False)
+
+# --- 3) Streamlit messages ---
+st.success(f"Réservation confirmée — Vélo ID {bike_id} ({model}) le {pickup_iso} pour {int(duree)}h.")
+st.info(f"📍 Retrait: {start_station} → Retour: {end_station}")

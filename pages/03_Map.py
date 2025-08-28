@@ -1,6 +1,5 @@
 import streamlit as st
 import pydeck as pdk
-from snowflake.snowpark.context import get_active_session
 
 st.header("🗺️ Carte des vélos disponibles à Lausanne")
 
