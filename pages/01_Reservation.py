@@ -60,42 +60,42 @@ if submitted:
         & (bikes["STATION_ID"] == start_station_id)
     ]
     .head(1)  # LIMIT 1
-)
+    )
 
-if not bike_row.empty:
-    bike_id = bike_row.iloc[0]["BIKE_ID"]
-else:
-    bike_id = None
+    if not bike_row.empty:
+        bike_id = bike_row.iloc[0]["BIKE_ID"]
+    else:
+        bike_id = None
 
-    if not bike_row:
-        st.error("Aucun vélo disponible pour ce modèle à cet instant.")
-        st.stop()
+        if not bike_row:
+            st.error("Aucun vélo disponible pour ce modèle à cet instant.")
+            st.stop()
 
-    bike_id = bike_row[0][0]
+        bike_id = bike_row[0][0]
 
 
-# --- 2) Insert reservation into reservations.csv ---
-reservations = pd.read_csv("tables/reservations.csv")
+    # --- 2) Insert reservation into reservations.csv ---
+    reservations = pd.read_csv("tables/reservations.csv")
 
-new_row = {
-    "BIKE_ID": bike_id,
-    "START_STATION_ID": start_station_id,
-    "END_STATION_ID": end_station_id,
-    "USER_EMAIL": email_q,
-    "PICKUP_TS": pickup_iso,
-    "DURATION_HOURS": int(duree),
-}
+    new_row = {
+        "BIKE_ID": bike_id,
+        "START_STATION_ID": start_station_id,
+        "END_STATION_ID": end_station_id,
+        "USER_EMAIL": email_q,
+        "PICKUP_TS": pickup_iso,
+        "DURATION_HOURS": int(duree),
+    }
 
-# Append new row
-reservations = pd.concat([reservations, pd.DataFrame([new_row])], ignore_index=True)
+    # Append new row
+    reservations = pd.concat([reservations, pd.DataFrame([new_row])], ignore_index=True)
 
-# Save back to CSV
-reservations.to_csv("tables/reservations.csv", index=False)
+    # Save back to CSV
+    reservations.to_csv("tables/reservations.csv", index=False)
 
-# --- 2) Update bikes.csv to mark the bike as RESERVED ---
-bikes.loc[bikes["BIKE_ID"] == bike_id, "STATUS"] = "RESERVED"
-bikes.to_csv("tables/bikes.csv", index=False)
+    # --- 2) Update bikes.csv to mark the bike as RESERVED ---
+    bikes.loc[bikes["BIKE_ID"] == bike_id, "STATUS"] = "RESERVED"
+    bikes.to_csv("tables/bikes.csv", index=False)
 
-# --- 3) Streamlit messages ---
-st.success(f"Réservation confirmée — Vélo ID {bike_id} ({model}) le {pickup_iso} pour {int(duree)}h.")
-st.info(f"📍 Retrait: {start_station} → Retour: {end_station}")
+    # --- 3) Streamlit messages ---
+    st.success(f"Réservation confirmée — Vélo ID {bike_id} ({model}) le {pickup_iso} pour {int(duree)}h.")
+    st.info(f"📍 Retrait: {start_station} → Retour: {end_station}")
