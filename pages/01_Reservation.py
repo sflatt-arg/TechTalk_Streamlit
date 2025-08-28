@@ -13,7 +13,7 @@ def sql_escape(s: str) -> str:
 
 
 # Modèles disponibles (distincts), même si certains vélos sont en maintenance
-bikes = pd.read_csv("table/bikes.csv")
+bikes = pd.read_csv("tables/bikes.csv")
 models = sorted(bikes["MODEL"].dropna().unique().tolist())
 
 # Stations disponibles (nom et ID)
