@@ -1,5 +1,6 @@
 import streamlit as st
 from datetime import datetime
+import pandas as pd
 
 st.set_page_config(page_title="Réservation de vélo", page_icon="📝", layout="centered")
 st.header("📝 Réservation d’un vélo")
