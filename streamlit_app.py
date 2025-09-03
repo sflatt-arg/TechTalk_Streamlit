@@ -19,7 +19,7 @@ supabase = create_client(url, key)
 
 
 # Write directly to the app
-st.set_page_config(page_title="Publibike/Velospot", initial_sidebar_state="expanded")
+# st.set_page_config(page_title="Publibike/Velospot", initial_sidebar_state="expanded")
 
 st.title("Publibike / Velospot — Démo Streamlit (UNIL–EPFL)")
 st.markdown("""
