@@ -8,4 +8,7 @@ dependencies:
   - pip
   - pip:
       - streamlit==1.38.0
+      - pandas==2.2.2
       - supabase==2.4.0
+      - httpx[http2]==0.27.*
+      
