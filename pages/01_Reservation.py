@@ -6,7 +6,22 @@ from supabase_client import supabase
 #st.set_page_config(page_title="Bike reservation", page_icon="📝", layout="centered")
 st.header("Fill the form to reserve a bike")
 
+<<<<<<< HEAD
 # --- 1. Load bikes and stations from Supabase and convert to dataframe ---
+=======
+supabase = create_client(url, key)
+
+st.header("📝 Réservation d’un vélo")
+
+
+
+# Utilitaire simple pour échapper les quotes dans les strings SQL
+def sql_escape(s: str) -> str:
+    return (s or "").replace("'", "''")
+
+
+# --- 2. Load bikes and stations from Supabase ---
+>>>>>>> 1e8190a0f5320a23283bde90e2cac953cba060c8
 bikes_res = supabase.table("bikes").select("*").execute()
 bikes = pd.DataFrame(bikes_res.data)
 
@@ -85,7 +100,12 @@ if submitted:
     supabase.table("bikes").update({"STATUS": "RESERVED"}).eq("BIKE_ID", bike_id).execute()
 
     # 4) Messages Streamlit
+<<<<<<< HEAD
     st.success(f"Your booking is confirmed! \n Bike ID {bike_id} ({model}) le {pickup_iso} pour {int(duration)}h.")
     st.info(f"📍 Pickup: {start_station} → Return: {end_station}")
     st.write("Enjoy your ride!")
     st.balloons()
+=======
+    st.success(f"Réservation confirmée — Vélo ID {bike_id} ({model}) le {pickup_iso} pour {int(duree)}h.")
+    st.info(f"📍 Retrait: {start_station} → Retour: {end_station}")
+>>>>>>> 1e8190a0f5320a23283bde90e2cac953cba060c8
