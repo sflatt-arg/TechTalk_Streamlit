@@ -77,11 +77,7 @@ mask = (
 view = df.loc[mask].reset_index(drop=True)
 
 # Display filtered data in the app
-st.dataframe(
-    view,
-    width='stretch',
-    hide_index=True
-)
+st.dataframe(view, use_container_width=True, hide_index=True)
 
 st.subheader("Information on the whole bike fleet")
 # Additional metrics displayed in three columns
