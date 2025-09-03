@@ -1,56 +1,51 @@
 import streamlit as st
 import pandas as pd
 from datetime import datetime
-from supabase import create_client
+from supabase_client import supabase
 
-# Load credentials from Streamlit secrets
-url = st.secrets["supabase"]["url"]
-key = st.secrets["supabase"]["key"]
+st.header("Bike return")
 
-supabase = create_client(url, key)
-
-
-st.header("🚲 Retour de vélo")
-
-# Initialiser session_state
+# 1. Initialise session_state
+# To persist data after button click
 if 'reservation_found' not in st.session_state:
     st.session_state.reservation_found = False
 if 'reservation_data' not in st.session_state:
     st.session_state.reservation_data = None
 
-# Formulaire de recherche
+# 2. Formulaire de recherche
 with st.form("return_form"):
-    st.subheader("Informations de retour")
+    st.subheader("Return a bike")
+    st.write("To return your bike, enter the bike ID and the email used during the reservation.")
     
     bike_id = st.number_input(
-        "ID du vélo", 
+        "Bike ID", 
         min_value=1, 
         step=1, 
-        help="L'ID du vélo que vous souhaitez retourner"
+        help="The bike ID is written on the bike"
     )
     
     email = st.text_input(
-        "Email de réservation", 
-        placeholder="prenom.nom@unil.ch",
-        help="L'email utilisé lors de la réservation"
+        "Booking email", 
+        placeholder="firstname.lastname@epfl.ch",
+        help="Email used during the reservation"
     )
     
     submitted = st.form_submit_button("Retourner le vélo")
 
-# Traitement de la recherche
+# Retrieves the reservation from Supabase
 if submitted:
     if not bike_id or not email:
-        st.error("L'ID du vélo et l'email sont requis.")
+        st.error("Bike ID and email are required.")
         st.session_state.reservation_found = False
     else:
-        # Votre requête Supabase...
+        # Supabase query to find the latest active reservation for this bike and email
         r = (
             supabase.table("reservations")
             .select(
                 "RESERVATION_ID,BIKE_ID,USER_EMAIL,START_STATION_ID,END_STATION_ID,PICKUP_TS,DURATION_HOURS,STATUS,"
                 "bikes(STATUS,STATION_ID),"
-                "start_station:stations!reservations_START_STATION_ID_fkey(NAME),"
-                "end_station:stations!reservations_END_STATION_ID_fkey(NAME)"
+                "START_STATION:stations!reservations_START_STATION_ID_fkey(NAME),"
+                "END_STATION:stations!reservations_END_STATION_ID_fkey(NAME)"
             )
             .eq("BIKE_ID", int(bike_id))
             .eq("USER_EMAIL", email)
@@ -61,16 +56,17 @@ if submitted:
         )
         
         if r.data:
+            # If a reservation is found, extract and flatten the data
             row = r.data[0]
             reservation_check = {
                 **{k: row[k] for k in ["RESERVATION_ID","BIKE_ID","USER_EMAIL","START_STATION_ID","END_STATION_ID","PICKUP_TS","DURATION_HOURS","STATUS"]},
                 "current_bike_status": row["bikes"]["STATUS"],
                 "bike_station_id": row["bikes"]["STATION_ID"],
-                "start_station_name": row["start_station"]["NAME"],
-                "end_station_name": row["end_station"]["NAME"],
+                "start_station_name": row["START_STATION"]["NAME"],
+                "end_station_name": row["END_STATION"]["NAME"],
             }
             
-            # Sauvegarder dans session_state
+            # Save in session state (to use the data later)
             st.session_state.reservation_found = True
             st.session_state.reservation_data = reservation_check
         else:
@@ -81,7 +77,7 @@ if submitted:
 if st.session_state.reservation_found and st.session_state.reservation_data:
     reservation_check = st.session_state.reservation_data
     
-    # Extraire les variables
+    # Extract data from the saved reservation
     reservation_id = reservation_check["RESERVATION_ID"]
     start_station_name = reservation_check["start_station_name"]
     end_station_name = reservation_check["end_station_name"]
@@ -92,20 +88,19 @@ if st.session_state.reservation_found and st.session_state.reservation_data:
     bike_id = reservation_check["BIKE_ID"]
     email = reservation_check["USER_EMAIL"]
     
-    # Affichage des infos
-    st.success("Réservation trouvée !")
+    # Print reservation details
+    st.success("Reservation found !")
     
-    st.subheader("Détails de la réservation:")
-    st.write(f"• **Vélo ID:** {bike_id}")
+    st.subheader("Reservation details:")
+    st.write(f"• **Bike ID:** {bike_id}")
     st.write(f"• **Email:** {email}")
-    st.write(f"• **Retrait:** {start_station_name}")
-    st.write(f"• **Retour prévu:** {end_station_name}")
+    st.write(f"• **Pickup station:** {start_station_name}")
+    st.write(f"• **Return station:** {end_station_name}")
     
-    # LE BOUTON - maintenant il persiste !
-    if st.button("✅ Confirmer le retour", type="primary"):
-        
+    if st.button("Confirm return", type="primary"):
+        # If confirm button is clicked, process the return
         try:
-            # 1) Mise à jour du vélo - SANS select()
+            # 1) Update bike tables : set STATUS to AVAILABLE and update STATION_ID
             bike_update = (
                 supabase.table("bikes")
                 .update({"STATUS": "AVAILABLE", "STATION_ID": int(end_station_id)})
@@ -113,8 +108,7 @@ if st.session_state.reservation_found and st.session_state.reservation_data:
                 .execute()
             )
             
-            # 2) Mise à jour de la réservation 
-            st.write("Mise à jour de la réservation")
+            # 2) Update reservation table : set STATUS to FINISHED 
             res_update = (
                 supabase.table("reservations")
                 .update({"STATUS": "FINISHED"})
@@ -123,23 +117,22 @@ if st.session_state.reservation_found and st.session_state.reservation_data:
                 .execute()
             )
             
-            # 3) Vérification et feedback
+            # 3) Check and feedback
             if bike_update.data and res_update.data:
-                st.success(f"Vélo {bike_id} retourné avec succès !")
-                st.success(f"Le vélo est maintenant disponible à la station: **{end_station_name}**")
-                st.balloons()
+                st.success(f"Bike {bike_id} successfully returned !")
+                st.success(f"Bike is now available in station **{end_station_name}**")
                 
                 # Reset session state après succès
                 st.session_state.reservation_found = False
                 st.session_state.reservation_data = None
                 
             else:
-                st.error("❌ Une des mises à jour a échoué")
+                st.error("Data update failed:")
                 if not bike_update.data:
-                    st.error("- Échec mise à jour vélo")
+                    st.error("- Bike update failed")
                 if not res_update.data:
-                    st.error("- Échec mise à jour réservation")
+                    st.error("- Reservation update failed")
                 
         except Exception as e:
-            st.error(f"❌ Erreur: {str(e)}")
+            st.error(f"❌ Error: {str(e)} - contact the app administrator.")
             st.exception(e)
