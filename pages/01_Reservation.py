@@ -9,7 +9,6 @@ key = st.secrets["supabase"]["key"]
 
 supabase = create_client(url, key)
 
-st.set_page_config(page_title="Réservation de vélo", page_icon="📝", layout="centered")
 st.header("📝 Réservation d’un vélo")
 
 
