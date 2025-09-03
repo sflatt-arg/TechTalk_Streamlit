@@ -2,6 +2,14 @@
 import streamlit as st
 from supabase import create_client
 
+try:
+    url = st.secrets["supabase"]["url"]
+    key = st.secrets["supabase"]["key"]
+    supabase = create_client(url, key)
+except Exception as e:
+    st.error(f"Failed to connect to Supabase: {e}")
+    st.stop()
+    
 # Load credentials from Streamlit secrets
 url = st.secrets["supabase"]["url"]
 key = st.secrets["supabase"]["key"]
