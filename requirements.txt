@@ -1,4 +1,6 @@
 streamlit==1.38.0
 pandas==2.2.2
 supabase==2.4.0
+httpx>=0.25.0
+gotrue>=2.3.0
 h2==4.*        # optional: allows HTTP/2 support
