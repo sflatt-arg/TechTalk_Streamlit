@@ -116,3 +116,4 @@ st.pydeck_chart(pdk.Deck(
 # Debug info (optional - remove in production)
 with st.expander("Additional information"):
     st.dataframe(df, width='stretch')
+    #st.dataframe(df, use_container_width=True) NEW
