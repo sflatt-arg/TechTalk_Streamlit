@@ -11,7 +11,7 @@ page_reservation = st.Page("pages/01_Reservation.py", title="Reservation")
 page_return = st.Page("pages/02_Return.py", title="Return")
 page_availability = st.Page("pages/03_Availability.py", title="Bike availability")
 page_map = st.Page("pages/04_Map.py", title="Map")
-page_feedback = st.Page("pages/05_Feedback.py", title="Feedback")
+page_feedback = st.Page("pages/05_feedback.py", title="Feedback")
 page_late_return = st.Page("pages/06_late_return.py", title="Late return predictor")
 
 pages = {
