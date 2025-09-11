@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier
+from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix, classification_report
@@ -62,12 +62,23 @@ def load_and_prepare_data(df):
     
     # Extract hour from timestamp
     df['hour'] = df['start_ts'].dt.hour
+
+    # Add cyclical time features
+    df['hour_sin'] = np.sin(2 * np.pi * df['hour'] / 24)
+    df['hour_cos'] = np.cos(2 * np.pi * df['hour'] / 24)
+    df['month_sin'] = np.sin(2 * np.pi * df['month'] / 12)
+    df['month_cos'] = np.cos(2 * np.pi * df['month'] / 12)
+
+    # Add peak time indicators
+    df['is_morning_peak'] = ((df['hour'] >= 7) & (df['hour'] <= 9)).astype(int)
+    df['is_evening_peak'] = ((df['hour'] >= 17) & (df['hour'] <= 19)).astype(int)
     
     # Features to use for training (excluding contextual features that won't be available at prediction time)
     feature_cols = [
-        'start_station', 'weekday', 'is_weekend', 'is_holiday', 'month',
-        'planned_duration_min', 'weather', 'temp_bucket', 'wind_bucket', 
-        'event_nearby', 'hour'
+    'start_station', 'weekday', 'is_weekend', 'is_holiday', 'month',
+    'planned_duration_min', 'weather', 'temp_bucket', 'wind_bucket', 
+    'event_nearby', 'hour', 'hour_sin', 'hour_cos', 'month_sin', 'month_cos',
+    'is_morning_peak', 'is_evening_peak'
     ]
     
     # Contextual features (available in training but need to be estimated/retrieved at prediction time)
@@ -102,8 +113,24 @@ def preprocess_features(df, feature_cols, contextual_cols, encoders=None, scaler
         scaler = StandardScaler()
     
     # Encode categorical variables
-    categorical_cols = ['start_station', 'weather', 'temp_bucket', 'wind_bucket']
-    
+    # Replace the existing categorical encoding with:
+    categorical_cols = ['start_station', 'weather']  # Keep nominal encoding
+    # Handle ordinal encoding
+    ordinal_cols = {'temp_bucket': ['cold', 'mild', 'warm'], 
+                    'wind_bucket': ['calm', 'breezy', 'windy']}
+
+    for col, categories in ordinal_cols.items():
+        if col in df_processed.columns:
+            if is_training:
+                df_processed[f'{col}_ord'] = df_processed[col].map(
+                    {cat: i for i, cat in enumerate(categories)}
+                ).fillna(0)
+            else:
+                mapping = {cat: i for i, cat in enumerate(categories)}
+                df_processed[f'{col}_ord'] = df_processed[col].map(mapping).fillna(0)
+
+    # Handle nominal encoding (existing code)
+    categorical_cols = ['start_station', 'weather']
     for col in categorical_cols:
         if col in df_processed.columns:
             if is_training:
@@ -112,22 +139,23 @@ def preprocess_features(df, feature_cols, contextual_cols, encoders=None, scaler
                 encoders[col] = le
             else:
                 if col in encoders:
-                    # Handle unseen categories
                     le = encoders[col]
                     df_processed[f'{col}_encoded'] = df_processed[col].apply(
                         lambda x: le.transform([x])[0] if x in le.classes_ else 0
                     )
                 else:
                     df_processed[f'{col}_encoded'] = 0
-    
-    # Prepare feature matrix
+
+    # Prepare feature matrix - FIXED VERSION
     encoded_categorical = [f'{col}_encoded' for col in categorical_cols if col in df_processed.columns]
+    ordinal_features = [f'{col}_ord' for col in ordinal_cols.keys() if col in df_processed.columns]
     numerical_cols = ['weekday', 'is_weekend', 'is_holiday', 'month', 'planned_duration_min', 'event_nearby', 'hour']
-    
+
     # Add contextual features if available
     available_contextual = [col for col in contextual_cols if col in df_processed.columns]
-    
-    all_features = numerical_cols + encoded_categorical + available_contextual
+
+    # CORRECTED: Include ordinal features in the final feature list
+    all_features = numerical_cols + encoded_categorical + ordinal_features + available_contextual
     
     # Filter features that actually exist
     existing_features = [col for col in all_features if col in df_processed.columns]
@@ -293,7 +321,7 @@ with tab1:
             
             with col1:
                 model_type = st.selectbox("Select Model Type", 
-                                        ["Random Forest", "Logistic Regression"])
+                                        ["Random Forest", "Gradient Boosting", "Logistic Regression"])
             
             with col2:
                 test_size = st.slider("Test Set Size", 0.1, 0.4, 0.2, 0.05)
@@ -314,18 +342,29 @@ with tab1:
                         )
                         
                         # Train model
+                        # Train model with better parameters
                         if model_type == "Random Forest":
                             model = RandomForestClassifier(
-                                n_estimators=100, 
-                                max_depth=10, 
+                                n_estimators=200,        # Increased from 100
+                                max_depth=15,           # Increased from 10
+                                min_samples_split=10,   # Added for better generalization
+                                min_samples_leaf=4,     # Added for better generalization
                                 random_state=42,
                                 class_weight='balanced'
                             )
-                        else:
+                        elif model_type == "Gradient Boosting":  # Add new option
+                            model = GradientBoostingClassifier(
+                                n_estimators=150,
+                                max_depth=6,
+                                learning_rate=0.1,
+                                random_state=42
+                            )
+                        else:  # Logistic Regression
                             model = LogisticRegression(
                                 random_state=42, 
                                 class_weight='balanced',
-                                max_iter=1000
+                                max_iter=1000,
+                                C=1.0  # Add regularization parameter
                             )
                         
                         model.fit(X_train, y_train)
@@ -416,52 +455,63 @@ with tab2:
         st.subheader("Enter Ride Details")
         
         with st.form("prediction_form"):
-            col1, col2 = st.columns(2)
+            st.subheader("Enter Ride Details")
             
+            # Row 1: Station and DateTime
+            col1, col2 = st.columns(2)
             with col1:
                 start_station = st.selectbox(
                     "Start Station", 
                     options=['S1', 'S2', 'S3', 'S4', 'S5']
                 )
-                
-                start_date = st.date_input("Start Date", value=datetime.now().date())
-                start_time = st.time_input("Start Time", value=time(9, 0))
-                
-                weekday = st.selectbox(
-                    "Day of Week", 
-                    options=[0, 1, 2, 3, 4, 5, 6],
-                    format_func=lambda x: ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'][x]
-                )
-                
-                is_weekend = st.checkbox("Weekend")
-                is_holiday = st.checkbox("Holiday")
-                
             with col2:
-                month = st.selectbox("Month", options=list(range(1, 13)))
-                
+                # Date and time side by side
+                date_col, time_col = st.columns(2)
+                with date_col:
+                    start_date = st.date_input("Date", value=datetime.now().date())
+                with time_col:
+                    start_time = st.time_input("Time", value=time(9, 0))
+            
+            # Row 2: Duration and Holiday
+            col1, col2 = st.columns(2)
+            with col1:
                 planned_duration_min = st.slider(
                     "Planned Duration (minutes)", 
                     min_value=5, 
-                    max_value=120, 
+                    max_value=240, 
                     value=30
                 )
-                
+            with col2:
+                is_holiday = st.checkbox("Holiday")
+            
+            # Row 3: Weather conditions
+            st.markdown("**Weather Conditions**")
+            col1, col2, col3 = st.columns(3)
+            with col1:
                 weather = st.selectbox(
                     "Weather", 
                     options=['sun', 'clouds', 'rain', 'wind', 'snow']
                 )
-                
+            with col2:
                 temp_bucket = st.selectbox(
                     "Temperature", 
                     options=['cold', 'mild', 'warm']
                 )
-                
+            with col3:
                 wind_bucket = st.selectbox(
                     "Wind Conditions", 
                     options=['calm', 'breezy', 'windy']
                 )
-                
-                event_nearby = st.checkbox("Event Nearby")
+            
+            # Row 4: Additional factors
+            event_nearby = st.checkbox("Event Nearby")
+            
+            # Calculate derived values (move this outside the columns)
+            start_datetime = datetime.combine(start_date, start_time)
+            weekday = start_datetime.weekday()
+            is_weekend = 1 if weekday >= 5 else 0  
+            month = start_datetime.month
+            hour = start_datetime.hour
             
             # Predict button
             submitted = st.form_submit_button("🔮 Predict Late Return Probability", type="primary")
