@@ -472,7 +472,6 @@ with tab2:
                     st.error("No training data available. Please train a model first.")
                 else:
                     try:
-                        st.write("🔍 **Step 1: Creating input data**")
                         # Prepare input data
                         input_data = {
                             'start_station': start_station,
@@ -507,9 +506,7 @@ with tab2:
                             'network_congestion_index': float(network_cong),
                             'user_tardiness_propensity': float(user_prop)
                         })
-                        st.success("✅ Step 2 completed")
-                        
-                        st.write("🔍 **Step 3: Creating DataFrame**")
+
                         # Create DataFrame
                         input_df = pd.DataFrame([input_data])
                         
